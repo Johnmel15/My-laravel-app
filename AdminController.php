@@ -2,35 +2,36 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Input;
+use App\Admin;
+use App\AlumniList;
 use App\AlumniTracer;
+use App\GraduatePerCourse;
+use App\OrgFileTable;
+use App\OrgUser;
+use App\Posts;
+use App\Program;
+use App\SchoolYear;
+use App\StaffFileTable;
+use App\StaffUser;
 use App\StudPregnantTracer;
 use App\StudVioTracer;
-use App\Program;
-use App\AlumniList;
-use App\studMasterList;
-use App\GraduatePerCourse;
-use App\ViolationList;
-use App\User;
-use App\Admin;
-use App\OrgFileTable;
-use App\StaffFileTable;
-use App\OrgUser;
-use App\StaffUser;
 use App\TableMinutes;
-use App\SchoolYear;
-use App\Posts;
-use Carbon\Carbon;
-use Response;
+use App\User;
+use App\ViolationList;
+use App\studMasterList;
 use Auth;
-use Hash;
-use Session;
-use DB;
+use Carbon\Carbon;
 use Charts;
-use Validator;
-use Redirect;
+use DB;
+use Hash;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB; // Imported DB facade
+use Illuminate\Support\Facades\Input;
 use Mail;
+use Redirect;
+use Response;
+use Session;
+use Validator;
 
 class AdminController extends Controller
 {
@@ -55,7 +56,7 @@ class AdminController extends Controller
         //          ->select('name', DB::raw('count(*) as total'))
         //          ->groupBy('name')
         //          ->get();
-        $count = AlumniList::select('id', \DB::raw("count(id)"))->groupBy('id')->get();
+        $count = AlumniList::select('id', DB::raw("count(id)"))->groupBy('id')->get(); // Import DB facade
         $count1 = StudVioTracer::select('name', \DB::raw("count(name)"))->groupBy('name')->get();
         $count2 = StudPregnantTracer::count();
         $count3 = OrgFileTable::count();
@@ -64,16 +65,19 @@ class AdminController extends Controller
         $posts = Posts::orderBy('id', 'desc')->paginate(5);
 
         return view('Admin/admin')->with(compact('count','count1', 'count2', 'posts', 'count3', 'count4', 'count5'));
-
     }
 
     public function upProfile()
     {
        // $alum = User::find($id);
        // return view('update')->with(compact('alum'));
-        return view('Admin/upProfile');
+        return view('Admin/upProfile'); // better use small letters on your views naming convension.
     }
 
+    // You may try to extract this method into more SOLID approach.
+    // Try to watch and understand Single approach on Laracasts.com
+    // https://laracasts.com/series/solid-principles-in-php/episodes/1
+    // or research about SOLID.
     public function viewUpProfile(Request $request, $id)
     {
         // $this->validate($request, array(
@@ -82,41 +86,29 @@ class AdminController extends Controller
         //     'password' => 'required|min:6',
         // ));
 
-        $user = Admin::find($id);
+        $user = Admin::findOrFail($id);
 
-        if ( Hash::check(Input::get('c_password'), $user['password']) )
-        {
+        if (Hash::check($request->get('c_password'), $user['password'])) {
             $user->name = $request->input('name');
             $user->username = $request->input('username');
             $user->password = Hash::make($request->password);
 
             $user->save();
 
-            Session::flash('success', 'Your account information has been change');
-            return redirect('/profile');      
-        } 
-        else if ( $user->name != $request->input('name') or $user->username != $request->input('username') )
-        {
+            return redirect('/profile'); // use redirect(route('profile_route_name'))->withSuccess('Your account information has been change');
+        } else if ($user->name != $request->input('name') or $user->username != $request->input('username')) {
             $user->name = $request->input('name');
             $user->username = $request->input('username');
             $user->save();
 
-            Session::flash('success', 'Your account information has been change');
-            return redirect('/profile');  
+            // Session::flash('success', 'Your account information has been change');
+            return redirect('/profile'); // use redirect(route('profile_route_name'))->withSuccess('Your account information has been change');
+        } else if ($this->checkIfNoChangesWereMade($request, $user)) {
+            // Extracted condition into method instead.
+            return redirect('/profile'); // use redirect(route('profile_route_name'))->withSuccess('No changes were made.');
+        } else {
+            return redirect('/upProfile'); // use redirect(route('profile_route_name'))->withSuccess('Incorrect password.');
         }
-        else if ( $user->name == $request->input('name') and $user->username == $request->input('username') and Input::get('c_password') == "" and Input::get('password') == "")
-        {
-            Session::flash('success', 'Nothing Change');
-            return redirect('/profile');
-        }
-        
-        else {
-
-            Session::flash('danger', 'Wrong current password please check');
-            return redirect('/upProfile');
-        }
-
-        
     }
 
     public function profile()
@@ -124,7 +116,10 @@ class AdminController extends Controller
         return view('Admin/profile');
     }
 
-
+    protected function checkIfNoChangesWereMade($request, $user)
+    {
+        return $user->name == $request->input('name') and $user->username == $request->input('username') and $request->get('c_password') == "" and $request->get('password') == "";
+    }
 
     public function conPanel()
     {
@@ -136,34 +131,40 @@ class AdminController extends Controller
         $studLists = studMasterList::all();
         $admin = Admin::all();
         $sy = SchoolYear::all();
-        $programs = DB::table("programs")                   
-           ->orderBy('abbreviation', 'asc')
-           ->get();
+        // $programs = DB::table('programs')
+        //    ->orderBy('abbreviation', 'asc')
+        //    ->get();
+        // I assumed Program Model is using table programs, instead of always using DB, use the model class instead.
+        $programs = Program::orderBy('abbreviation')->get(); // or create a scope like Program::byAbbreviation();
 
-
-        return view('Admin/conpanel')->with(compact('progs', 'grads', 'alums', 'orgs', 'offs', 'programs', 'studLists', 'admin', 'sy'));
+        return view('Admin/conpanel') // highly suggest to use small letters for view naming conventions.
+               ->with(compact('progs', 'grads', 'alums', 'orgs', 'offs', 'programs', 'studLists', 'admin', 'sy'));
     }
 
     public function addAlumni(Request $request)
     {
-         $this->validate($request, array(
+        $this->validate($request, array(
             'firstname' => 'required',
             'lastname' => 'required',
             'batch' => 'required',
             'course' => 'required',
         ));
+        // I personally use, Form Request Validation for SOLID approach.
+        // Please check https://laravel.com/docs/5.5/validation#form-request-validation
 
-        $alum = new AlumniList;
-        $alum->firstname = $request->firstname;
-        $alum->lastname = $request->lastname;
-        $alum->batch = $request->batch;
-        $alum->course = $request->course;
+        // $alum = new AlumniList;
+        // $alum->firstname = $request->firstname;
+        // $alum->lastname = $request->lastname;
+        // $alum->batch = $request->batch;
+        // $alum->course = $request->course;
+        // $alum->save();
+        // You can still use the above approach but I personally use the create method.
+        // Since all request properties are just the same with the AlumniList columns and/or fillables,
+        // Use the request `all()` method instead.
 
-        $alum->save();
+        $alum = AlumniList::create($request->all());
 
-        Session::flash('success', 'save !');
-
-        return redirect('/conPanel');
+        return redirect('/conPanel');  // use redirect(route('profile_route_name'))->withSuccess('Saved!');
     }
 
     public function addCourse(Request $request)
@@ -172,16 +173,19 @@ class AdminController extends Controller
             'program' => 'required',
             'abbreviation' => 'required',
         ));
+        // I personally use, Form Request Validation for SOLID approach.
+        // Please check https://laravel.com/docs/5.5/validation#form-request-validation
 
-        $prog = new Program;
-        $prog->program = $request->program;
-        $prog->abbreviation = $request->abbreviation;
+        // $prog = new Program;
+        // $prog->program = $request->program;
+        // $prog->abbreviation = $request->abbreviation;
+        // $prog->save();
+        // Since all request properties are just the same with the AlumniList columns and/or fillables,
+        // Use the request `all()` method instead.
 
-        $prog->save();
+        $prog = Program::create($request->all());
 
-        Session::flash('success', 'save !');
-
-        return redirect('/conPanel');
+        return redirect('/conPanel'); // use redirect(route())->withSuccess('Saved!');
     }
 
     public function addGrad(Request $request)
@@ -193,6 +197,7 @@ class AdminController extends Controller
             'year' => 'required',
             'date_graduated' => 'required',
         ));
+        // Again.
 
         $grad = new GraduatePerCourse;
         $grad->program = $request->program;
@@ -201,25 +206,23 @@ class AdminController extends Controller
         $grad->male = $request->male;
         $grad->female = $request->female;
         $grad->total = ($request->female)+($request->male);
-
-
-
         $grad->save();
+        // You may extend or add another method for your Request class for adding GraduatePerCourse like
+        // $grad = GraduatePerCourse::create($request->allData());
 
-        Session::flash('success', 'save !');
-
-        return redirect('/conPanel');
+        return redirect('/conPanel');  // use redirect(route())->withSuccess('Saved!');
     }
 
     public function addOrgAcc(Request $request)
     {
-         $this->validate($request, array(
+        $this->validate($request, array(
             'name' => 'required',
             'username' => 'required',
             'email' => 'required',
             'password' => 'required',
             'org_name' => 'required',
         ));
+        // Again.
 
         $org = new OrgUser;
         $org->name = $request->name;
@@ -227,71 +230,63 @@ class AdminController extends Controller
         $org->email = $request->email;
         $org->password = Hash::make($request->password);
         $org->org_name = $request->org_name;
-
         $org->save();
+        // Again.
 
-        Session::flash('success', 'save !');
-
-        return redirect('/conPanel');
+        return redirect('/conPanel'); // use redirect(route())->withSuccess('Saved!');
     }
 
     public function addStaffAcc(Request $request)
     {
-         $this->validate($request, array(
+        $this->validate($request, array(
             'name' => 'required',
             'username' => 'required',
             'office_name' => 'required',
         ));
+        // Again.
 
+        $name = $request->get('name'); // Limit your usage of Input Facades
+        $email = $request->get('email');
+        $username = $request->get('username');
+        $office_name = $request->get('office_name');
+        $pass = str_random(8);
 
-                $name = Input::get('name');
-                $email = $request->get('email');
-                $username = $request->get('username');
-                $office_name = $request->get('office_name');
-                $pass = str_random(8);
-
-              $data =['name'=>$name, 'pass'=>$pass, 'username'=>$username];
-              Mail::send(['html'=>'mail.staffMessage'], $data, function($message) 
-                use ($email, $name, $username, $office_name, $pass)
-              {
-                $message->to($email)->subject('Thank you for signing in to KCAST-MIS');
-                $message->from('johnmelviesulla.pixelprintojt@gmail.com', 'KCAST Administrator');
-              });
+        $data = [ 'name' => $name, 'pass' => $pass, 'username' => $username ]; // Use spaces the're free to use.
+        Mail::send(['html' => 'mail.staffMessage'], $data, function($message) use ($email, $name, $username, $office_name, $pass) {
+            $message->to($email)->subject('Thank you for signing in to KCAST-MIS');
+            $message->from('johnmelviesulla.pixelprintojt@gmail.com', 'KCAST Administrator');
+        });
+        // You may use an Event here, like:
+        // ```
+        // event(new SendMailToStaffEvent($data, ....))
+        // ```
+        // Kindly read and understand https://laravel.com/docs/5.5/events#dispatching-events
 
         $org = new StaffUser;
         $org->name = $name;
         $org->username = $username;
         $org->email = $email;
-        $org->password = Hash::make($pass);
+        $org->password = Hash::make($pass); // Use bcrypt() or mutator method [https://laravel.com/docs/5.5/eloquent-mutators#accessors-and-mutators]
         $org->office_name = $office_name;
-
         $org->save();
 
-        Session::flash('success', 'The mail send Successfully ! please check your email account inbox.');
-        
-        return redirect('/conPanel');
+        return redirect('/conPanel'); // use redirect(route())->withSuccess('Email was sent succesfully! Please check your email.');
     }
-
-
 
     public function alumniTracer()
     {
-
         $alumnus = DB::table('alumni_tracers')
                    ->select(DB::raw('firstname as firstname, lastname as lastname, status as status, COUNT(*) count'))
                    ->groupBy('firstname','lastname')
                    ->orderByRaw('min(created_at) desc')
                    ->get();
 
-        $programs = DB::table("programs")                   
+        $programs = DB::table('programs') // Again, and use single quote for consistency.
                ->orderBy('abbreviation', 'asc')
                ->get();
 
         $progs = GraduatePerCourse::all();
-
         $course = Program::all();
-
-
         $counts = DB::table('alumni_tracers')
             ->select(DB::raw('year_graduated as year_graduated, course as course, firstname as firstname, lastname as lastname'))
             ->groupBy('firstname', 'lastname')
@@ -304,7 +299,6 @@ class AdminController extends Controller
         $total_male = 0;
         $total_female = 0;
         $count=0;
-
 
         $male = AlumniTracer::select('id', \DB::raw("count(*)"))
         ->where('gender', '=', 'Male')
@@ -341,14 +335,13 @@ class AdminController extends Controller
 
     public function alumniSingle($firstname, $lastname)
     {
+        $alums = DB::table('alumni_tracers')
+            ->where('firstname', 'like', '%' . $firstname . '%')
+            ->where('lastname', 'like', '%' . $lastname . '%')
+            ->orderby('created_at', 'desc')
+            ->get();
 
-            $alums = DB::table("alumni_tracers")
-                ->where("firstname", 'like', '%'.$firstname.'%')
-                ->where("lastname", 'like', '%'.$lastname.'%')
-                ->orderby('created_at', 'desc')
-                ->get();
-               
-            return view('Admin/alumniSingle')->with(compact('alums'));
+        return view('Admin/alumniSingle')->with(compact('alums'));
     }
 
     public function fullDetails($id)
@@ -360,7 +353,7 @@ class AdminController extends Controller
     public function svctracer()
     {
         $sy = "2017-2018";
-        
+
          // $chart = Charts::database(DB::table('stud_vio_tracers')
          //           ->select(DB::raw('name as name, program as program, violation as violation, COUNT(*) cases'))
          //           ->where("semester", '=', "1st")
@@ -523,7 +516,6 @@ class AdminController extends Controller
               ->width(900)
               ->groupBy('gender');
 
-       
         $studs = DB::table('stud_vio_tracers')
                    ->select(DB::raw('name as name, program as program, violation as violation, COUNT(violation) cases'))
                    ->groupBy('name', 'program')
@@ -533,7 +525,7 @@ class AdminController extends Controller
         $counts = DB::table('stud_vio_tracers')
             ->select(DB::raw('name as name, program as program, violation as violation'))
             ->groupBy('name')
-            ->get();               
+            ->get();
 
         $course = Program::all();
         $casess = 0;
@@ -543,17 +535,17 @@ class AdminController extends Controller
                    ->orderBy('violation', 'asc')
                    ->get();
 
-        $programs = DB::table("programs")                   
+        $programs = DB::table("programs")
                    ->orderBy('abbreviation', 'asc')
                    ->get();
 
         return view('Admin/svctracer')->with(compact('studs', 'violations', 'chart', 'chart1', 'chart2', 'chart3', 'chartt', 'chart11', 'chart22', 'chart33', 'programs', 'counts', 'sy'));
     }
 
-      public function svcTracerr(Request $request)
+    public function svcTracerr(Request $request)
     {
         $sy = $request->get('year');
-        
+
          $chart = Charts::database(DB::table('stud_vio_tracers')
                    ->select(DB::raw('name as name, program as program, violation as violation, COUNT(*) cases'))
                    ->where("semester", '=', "1st")
@@ -634,7 +626,7 @@ class AdminController extends Controller
               ->width(900)
               ->groupBy('gender');
 
-       
+
         $studs = DB::table('stud_vio_tracers')
                    ->select(DB::raw('name as name, program as program, violation as violation, COUNT(violation) cases'))
                    ->groupBy('name', 'program')
@@ -644,7 +636,7 @@ class AdminController extends Controller
         $counts = DB::table('stud_vio_tracers')
             ->select(DB::raw('name as name, program as program, violation as violation'))
             ->groupBy('name')
-            ->get();               
+            ->get();
 
         $course = Program::all();
         $casess = 0;
@@ -654,28 +646,24 @@ class AdminController extends Controller
                    ->orderBy('violation', 'asc')
                    ->get();
 
-        $programs = DB::table("programs")                   
+        $programs = DB::table("programs")
                    ->orderBy('abbreviation', 'asc')
                    ->get();
 
         return view('Admin/svctracer')->with(compact('studs', 'violations', 'chart', 'chart1', 'chart2', 'chart3', 'chartt', 'chart11', 'chart22', 'chart33', 'programs', 'counts', 'sy'));
     }
 
-
     public function svcForm()
     {
+        $violations = DB::table('violation_lists')
+               ->orderBy('violation', 'asc')
+               ->get();
 
-            $violations = DB::table("violation_lists")
-                   ->orderBy('violation', 'asc')
-                   ->get();
-
-            $programs = DB::table("programs")                   
-                   ->orderBy('abbreviation', 'asc')
-                   ->get();
-
+        $programs = DB::table('programs') // Again
+               ->orderBy('abbreviation', 'asc')
+               ->get();
 
         return view('Admin/svcForm')->with(compact('violations', 'programs'));
-
     }
 
     public function svcStore(Request $request)
@@ -692,157 +680,143 @@ class AdminController extends Controller
             'violation' => 'required',
         );
 
+        $validator = Validator::make($request->all(), $rules);
 
-        $validator = Validator::make(Input::all(), $rules);
-
-        if ($validator->fails()) 
+        if ($validator->fails())
         {
             $messages = $validator->messages();
 
 
-            return Redirect::to('/svcForm')->withInput()->withErrors($validator);
-        }else{
+            return Redirect::to('/svcForm')->withInput()->withErrors($validator); // you can use redirect() or back() helper instead of Redirect::to()
+        } else {
+            $other = $request->get('other_case');
 
+            if ($other == "") {
+                $stud = new StudVioTracer;
+                $stud->name = $request->fname." ".$request->lname;
+                $stud->program = $request->program;
+                $stud->gender = $request->gender;
+                $stud->date = $request->date;
+                $stud->violation = $request->violation;
+                $stud->school_yr = $request->school_yr;
+                $stud->semester = $request->semester;
+                $stud->action_taken = $request->action_taken;
+                $stud->minutes = $request->minutes;
+                $stud->remarks = $request->remarks;
 
-        $other = $request->get('other_case');
+                $min = new TableMinutes;
+                $min->name = $request->fname." ".$request->lname;
+                $min->program = $request->program;
+                $min->gender = $request->gender;
+                $min->date = $request->date;
+                $min->violation = $request->violation;
+                $min->school_yr = $request->school_yr;
+                $min->semester = $request->semester;
+                $min->action_taken = $request->action_taken;
+                $min->minutes = $request->minutes;
+                $min->remarks = $request->remarks;
+                $stud->save();
+                $min->save();
+            } else {
+                $stud = new StudVioTracer;
+                $stud->name = $request->fname." ".$request->lname;
+                $stud->program = $request->program;
+                $stud->gender = $request->gender;
+                $stud->date = $request->date;
+                $stud->violation = $other;
+                $stud->school_yr = $request->school_yr;
+                $stud->semester = $request->semester;
+                $stud->action_taken = $request->action_taken;
+                $stud->minutes = $request->minutes;
+                $stud->remarks = $request->remarks;
 
-        if ($other == ""){
-        $stud = new StudVioTracer;
-        $stud->name = $request->fname." ".$request->lname;
-        $stud->program = $request->program;
-        $stud->gender = $request->gender;
-        $stud->date = $request->date;
-        $stud->violation = $request->violation;
-        $stud->school_yr = $request->school_yr;
-        $stud->semester = $request->semester;
-        $stud->action_taken = $request->action_taken;
-        $stud->minutes = $request->minutes;
-        $stud->remarks = $request->remarks;
+                $min = new TableMinutes;
+                $min->name = $request->fname." ".$request->lname;
+                $min->program = $request->program;
+                $min->gender = $request->gender;
+                $min->date = $request->date;
+                $min->violation = $other;
+                $min->school_yr = $request->school_yr;
+                $min->semester = $request->semester;
+                $min->action_taken = $request->action_taken;
+                $min->minutes = $request->minutes;
+                $min->remarks = $request->remarks;
 
+                $vio = new ViolationList;
+                $vio->violation = $other;
 
-        $min = new TableMinutes;
-        $min->name = $request->fname." ".$request->lname;
-        $min->program = $request->program;
-        $min->gender = $request->gender;
-        $min->date = $request->date;
-        $min->violation = $request->violation;
-        $min->school_yr = $request->school_yr;
-        $min->semester = $request->semester;        
-        $min->action_taken = $request->action_taken;
-        $min->minutes = $request->minutes;
-        $min->remarks = $request->remarks;
+                $stud->save();
+                $vio->save();
+                $min->save();
+            }
 
-
-        $stud->save();
-        $min->save();
-
-      }else{
-        $stud = new StudVioTracer;
-        $stud->name = $request->fname." ".$request->lname;
-        $stud->program = $request->program;
-        $stud->gender = $request->gender;
-        $stud->date = $request->date;      
-        $stud->violation = $other;
-        $stud->school_yr = $request->school_yr;
-        $stud->semester = $request->semester;        
-        $stud->action_taken = $request->action_taken;
-        $stud->minutes = $request->minutes;
-        $stud->remarks = $request->remarks;
-
-        $min = new TableMinutes;
-        $min->name = $request->fname." ".$request->lname;
-        $min->program = $request->program;
-        $min->gender = $request->gender;
-        $min->date = $request->date;
-        $min->violation = $other;
-        $min->school_yr = $request->school_yr;
-        $min->semester = $request->semester;        
-        $min->action_taken = $request->action_taken;
-        $min->minutes = $request->minutes;
-        $min->remarks = $request->remarks;
-
-
-        $vio = new ViolationList;
-        $vio->violation = $other;
-
-        $stud->save();
-        $vio->save();
-        $min->save();
-
-      }
-
-
-        Session::flash('success', 'The case successfully save !');
-
-        return redirect('/svcTracer');
+        return redirect('/svcTracer'); // Use redirect(route('svg_tracer_view_path'))->withSuccess('The case was successfully save.')
         }
     }
 
 
     public function svcCases($name)
     {
+        $studs = DB::table('stud_vio_tracers')
+            ->where('name', 'like', '%'.$name.'%')
+            ->orderBy('created_at', 'desc')
+            ->orderBy('minutes', 'desc')
+            ->groupBy('violation')
+            ->get();
 
-
-            $studs = DB::table("stud_vio_tracers")
-                ->where("name", 'like', '%'.$name.'%')
-                ->orderby('created_at', 'desc')
-                ->orderby('minutes', 'desc')
-                ->groupBy('violation')
-                ->get();
-               
-            return view('Admin/svcCases')->with(compact('studs'));
+        return view('Admin/svcCases')->with(compact('studs'));
     }
 
     public function svcRemarks(Request $request, $name, $violation)
     {
-            $name = $request->get('name');
-            $violation = $request->get('violation');
+        $name = $request->get('name');
+        $violation = $request->get('violation');
 
+        $studs = DB::table("stud_vio_tracers")
+            ->where("name", 'like', '%'.$name.'%')
+            ->where("violation", 'like', '%'.$violation.'%')
+            ->orderby('created_at', 'desc')
+            ->orderby('minutes', 'desc')
+            ->get();
 
-            $studs = DB::table("stud_vio_tracers")
-                ->where("name", 'like', '%'.$name.'%')
-                ->where("violation", 'like', '%'.$violation.'%')
-                ->orderby('created_at', 'desc')
-                ->orderby('minutes', 'desc')
-                ->get();
+        $records = DB::table("stud_vio_tracers")
+            ->where("name", 'like', '%'.$name.'%')
+            ->where("violation", 'like', '%'.$violation.'%')
+            ->orderby('created_at', 'desc')
+            ->orderby('minutes', 'desc')
+            ->get();
 
-            $records = DB::table("stud_vio_tracers")
-                ->where("name", 'like', '%'.$name.'%')
-                ->where("violation", 'like', '%'.$violation.'%')
-                ->orderby('created_at', 'desc')
-                ->orderby('minutes', 'desc')
-                ->get();
+        // $studs = DB::table("stud_vio_tracers")
+        //     ->where("name", 'like', '%'.$name.'%')
+        //     ->orderby('created_at', 'desc')
+        //     ->orderby('minutes', 'desc')
+        //     ->get();
 
-            // $studs = DB::table("stud_vio_tracers")
-            //     ->where("name", 'like', '%'.$name.'%')
-            //     ->orderby('created_at', 'desc')
-            //     ->orderby('minutes', 'desc')
-            //     ->get();
-               
-            return view('Admin/svcRemarks')->with(compact('studs', 'records'));
+        return view('Admin/svcRemarks')->with(compact('studs', 'records'));
     }
 
 
     public function svcShow($id)
     {
-       
        $minutes = DB::table("table_minutes")
                 ->where("id", 'like', '%'.$id.'%')
                 ->get();
         return view('Admin/svcShow')->with(compact('minutes'));
     }
 
-    public function svcEdit ($id)
+    public function svcEdit($id)
     {
+        // I assumed table `stud_vio_tracers` uses StudVioTracer model
+        // Though I'm a bit confuse why you want to get the data from
+        // `stud_vio_tracers` in array, and you want to find the first one.
+        $records = StudVioTracer::whereId($id)->get();
+        // $stud = StudVioTracer::find($id);
+        // If you insists to find the first one from the table `stud_vio_tracers`,
+        // you may use this:
+        $stud = $records->first(); // Since get() return's Collection
 
-        $records = DB::table("stud_vio_tracers")
-               ->where('id', '=', $id)
-               ->get();
-
-       $stud = StudVioTracer::find($id);
-       return view('Admin/svcEdit')->with(compact('stud', 'records'));
+        return view('Admin/svcEdit')->with(compact('stud', 'records'));
     }
-
 
     // public function svcChange ($id)
     // {
@@ -851,7 +825,7 @@ class AdminController extends Controller
     //            ->orderBy('violation', 'asc')
     //            ->get();
 
-    //     $programs = DB::table("programs")                   
+    //     $programs = DB::table("programs")
     //            ->orderBy('abbreviation', 'asc')
     //            ->get();
 
@@ -859,7 +833,7 @@ class AdminController extends Controller
     //    return view('Admin/svcChange')->with(compact('stud', 'violations', 'programs'));
     // }
 
-    public function svcUpdate (Request $request, $id)
+    public function svcUpdate(Request $request, $id)
     {
         $this->validate($request, array(
             'name' => 'required',
@@ -871,18 +845,20 @@ class AdminController extends Controller
             'minutes' => 'required',
             'remarks' => 'required',
         ));
+        // Again.
 
         $stud = new StudVioTracer;
         $stud->name = $request->name;
         $stud->program = $request->program;
         $stud->gender = $request->gender;
-        $stud->date = $request->date;      
+        $stud->date = $request->date;
         $stud->violation = $request->violation;
         $stud->school_yr = $request->school_yr;
-        $stud->semester = $request->semester;        
+        $stud->semester = $request->semester;
         $stud->action_taken = $request->action_taken;
         $stud->minutes = $request->minutes;
         $stud->remarks = $request->remarks;
+        // Again.
 
         $min = new TableMinutes;
         $min->name = $request->name;
@@ -891,10 +867,11 @@ class AdminController extends Controller
         $min->date = $request->date;
         $min->violation = $request->violation;
         $min->school_yr = $request->school_yr;
-        $min->semester = $request->semester;        
+        $min->semester = $request->semester;
         $min->action_taken = $request->action_taken;
         $min->minutes = $request->minutes;
         $min->remarks = $request->remarks;
+        // Again
 
 
         $min->save();
@@ -902,7 +879,7 @@ class AdminController extends Controller
 
         Session::flash('success', 'The case successfully updated !');
 
-        return redirect('/svcTracer');    
+        return redirect('/svcTracer'); // Also again.
     }
 
     public function svcChangeUpdate (Request $request, $id)
@@ -917,15 +894,16 @@ class AdminController extends Controller
             'minutes' => 'required',
             'remarks' => 'required',
         ));
+        // Again.
 
         $stud = StudVioTracer::find($id);
         $stud->name = $request->name;
         $stud->program = $request->program;
         $stud->gender = $request->gender;
-        $stud->date = $request->date;      
+        $stud->date = $request->date;
         $stud->violation = $request->violation;
         $stud->school_yr = $request->school_yr;
-        $stud->semester = $request->semester;        
+        $stud->semester = $request->semester;
         $stud->action_taken = $request->action_taken;
         $stud->minutes = $request->minutes;
         $stud->remarks = $request->remarks;
@@ -937,7 +915,7 @@ class AdminController extends Controller
         $min->date = $request->date;
         $min->violation = $request->violation;
         $min->school_yr = $request->school_yr;
-        $min->semester = $request->semester;        
+        $min->semester = $request->semester;
         $min->action_taken = $request->action_taken;
         $min->minutes = $request->minutes;
         $min->remarks = $request->remarks;
@@ -948,7 +926,8 @@ class AdminController extends Controller
 
         Session::flash('success', 'The case successfully updated !');
 
-        return redirect('/svcTracer');    
+        return redirect('/svcTracer');
+        // Also again.
     }
 
 
@@ -964,33 +943,33 @@ class AdminController extends Controller
     //             ->orderby('created_at', 'desc')
     //             ->orderby('minutes', 'desc')
     //             ->get();
-               
+
     //         return view('Admin/svcMinutes')->with(compact('minutes'));
     // }
 
-        public function svcMinutes(Request $request, $name, $violation)
+    public function svcMinutes(Request $request, $name, $violation)
     {
-            $name = $request->get('name');
-            $violation = $request->get('violation');
-            $remarks = $request->get('remarks');
+        $name = $request->get('name');
+        $violation = $request->get('violation');
+        $remarks = $request->get('remarks');
 
-            $minutes = DB::table("table_minutes")
-                ->where("name", 'like', '%'.$name.'%')
-                ->where("violation", 'like', '%'.$violation.'%')
-                ->where("remarks", 'like', '%'.$remarks.'%')
-                ->orderby('created_at', 'desc')
-                ->orderby('minutes', 'desc')
-                ->get();
-                             
-            return view('Admin/svcMinutes')->with(compact('minutes'));
+        $minutes = DB::table("table_minutes")
+            ->where("name", 'like', '%'.$name.'%')
+            ->where("violation", 'like', '%'.$violation.'%')
+            ->where("remarks", 'like', '%'.$remarks.'%')
+            ->orderBy('created_at', 'desc')
+            ->orderBy('minutes', 'desc')
+            ->get();
+
+        return view('Admin/svcMinutes')->with(compact('minutes'));
     }
 
     public function minutesEdit ($id)
     {
-       $minutes = TableMinutes::find($id);
-       return view('Admin/minutesEdit')->with(compact('minutes'));
-    }
+        $minutes = TableMinutes::find($id);
 
+        return view('Admin/minutesEdit')->with(compact('minutes'));
+    }
 
     public function minutesUpdate (Request $request, $id)
     {
@@ -1004,26 +983,27 @@ class AdminController extends Controller
             'minutes' => 'required',
             'remarks' => 'required',
         ));
+        // Again.
 
         $stud = new TableMinutes;
         $stud->name = $request->name;
         $stud->program = $request->program;
         $stud->gender = $request->gender;
-        $stud->date = $request->date;      
+        $stud->date = $request->date;
         $stud->violation = $request->violation;
         $stud->school_yr = $request->school_yr;
-        $stud->semester = $request->semester;        
+        $stud->semester = $request->semester;
         $stud->action_taken = $request->action_taken;
         $stud->minutes = $request->minutes;
         $stud->remarks = $request->remarks;
-
 
 
         $stud->save();
 
         Session::flash('success', 'The minutes successfully updated !');
 
-        return redirect('/svcTracer');    
+        return redirect('/svcTracer');
+        // And again.
     }
 
 
@@ -1031,16 +1011,13 @@ class AdminController extends Controller
 
     public function spcForm()
     {
-            $programs = DB::table("programs")                   
-                   ->orderBy('abbreviation', 'asc')
-                   ->get();
+        $programs = Program::orderBy('abbreviation')->get();
 
         return view('Admin/spcForm')->with(compact('programs'));
     }
 
     public function spcTracer(Request $request)
     {
-
         $sy = "2017-2018";
 
         $chart = Charts::database(DB::table('stud_pregnant_tracers')
@@ -1054,7 +1031,7 @@ class AdminController extends Controller
               ->responsive(false)
               ->height(400)
               ->width(900)
-              ->groupBy('program'); 
+              ->groupBy('program');
 
         $chartt = Charts::database(DB::table('stud_pregnant_tracers')
                    ->select(DB::raw('name as name, program as program, semester as semester, COUNT(*) cases'))
@@ -1067,7 +1044,7 @@ class AdminController extends Controller
               ->responsive(false)
               ->height(400)
               ->width(900)
-              ->groupBy('program'); 
+              ->groupBy('program');
 
         $chart2 = Charts::database(StudPregnantTracer::all(), 'bar', 'highcharts')
               ->title("Number of Unintended Pregnancy Per Year")
@@ -1078,18 +1055,17 @@ class AdminController extends Controller
               ->groupByYear('10');
 
 
-        $programs = DB::table("programs")                   
+        $programs = DB::table("programs")
            ->orderBy('abbreviation', 'asc')
-           ->get();   
+           ->get();
 
         $studs = StudPregnantTracer::orderBy('id', 'desc')->paginate(5);
-        return view('Admin/spctracer')->with(compact('studs', 'chart', 'chartt', 'chart2', 'programs', 'sy'));
 
+        return view('Admin/spctracer')->with(compact('studs', 'chart', 'chartt', 'chart2', 'programs', 'sy'));
     }
 
     public function spcTracerr(Request $request)
     {
-
         $sy = $request->get('year');
 
         $chart = Charts::database(DB::table('stud_pregnant_tracers')
@@ -1103,7 +1079,7 @@ class AdminController extends Controller
               ->responsive(false)
               ->height(400)
               ->width(900)
-              ->groupBy('program'); 
+              ->groupBy('program');
 
         $chartt = Charts::database(DB::table('stud_pregnant_tracers')
                    ->select(DB::raw('name as name, program as program, semester as semester, COUNT(*) cases'))
@@ -1116,7 +1092,7 @@ class AdminController extends Controller
               ->responsive(false)
               ->height(400)
               ->width(900)
-              ->groupBy('program'); 
+              ->groupBy('program');
 
         $chart2 = Charts::database(StudPregnantTracer::all(), 'bar', 'highcharts')
               ->title("Number of Unintended Pregnancy Per Year")
@@ -1127,13 +1103,10 @@ class AdminController extends Controller
               ->groupByYear('10');
 
 
-        $programs = DB::table("programs")                   
-           ->orderBy('abbreviation', 'asc')
-           ->get();   
-
+        $programs = Program::orderBy('abbreviation')->get();
         $studs = StudPregnantTracer::orderBy('id', 'desc')->paginate(5);
-        return view('Admin/spctracer')->with(compact('studs', 'chart', 'chartt', 'chart2', 'programs', 'sy'));
 
+        return view('Admin/spctracer')->with(compact('studs', 'chart', 'chartt', 'chart2', 'programs', 'sy'));
     }
 
     public function spcStore(Request $request)
@@ -1165,21 +1138,18 @@ class AdminController extends Controller
         Session::flash('success', 'The case successfully save !');
 
         return redirect('/spcTracer');
+        // And Again.
     }
 
 
     public function printPreview(Request $request)
     {
-
-
-            $course = $request->get('chooser');
-            $salary = $request->get('salary');
-            $year = $request->get('year');
-            $from = $request->get('from');
-            $to = $request->get('to');
-
-            $head = Admin::all();
-
+        $course = $request->get('chooser');
+        $salary = $request->get('salary');
+        $year = $request->get('year');
+        $from = $request->get('from');
+        $to = $request->get('to');
+        $head = Admin::all();
 
         if ($course == "All" && $year == "All" && $salary == "All" ){
 
@@ -1277,47 +1247,32 @@ class AdminController extends Controller
                 ->get();
                 return view('/printPreview')->with(compact('courses', 'from', 'course', 'year', 'head', 'to', 'salary'));
         }
-
-
-
-
-
-
     }
 
     public function printPreview1(Request $request)
     {
-
-            $program = $request->get('c');
-            $year = $request->get('school_yr');
-            $sem = $request->get('sem');
-
-         $head = Admin::all();
-
+        $program = $request->get('c');
+        $year = $request->get('school_yr');
+        $sem = $request->get('sem');
+        $head = Admin::all();
 
         if ($program == "All" && $year == "All" && $sem == "All"){
-
            $studs = DB::table("stud_pregnant_tracers")
                 ->orderBy("program", "school_yr")
                 ->get();
                 return view('/printpreview1')->with(compact('studs', 'program', 'year', 'head', 'sem'));
-
         }
-        else if ($year == "All" && $sem == "All"){
-
+        else if ($year == "All" && $sem == "All") {
            $studs = DB::table("stud_pregnant_tracers")
                 ->where("program", 'like', '%'.$program.'%')
                 ->get();
                 return view('/printPreview1')->with(compact('studs', 'program', 'year', 'head', 'sem'));
-
         }
-        else if ($program == "All" && $sem == "All"){
-
+        else if ($program == "All" && $sem == "All") {
            $studs = DB::table("stud_pregnant_tracers")
                 ->where("school_yr", 'like', '%'.$year.'%')
                 ->get();
                 return view('printpreview1')->with(compact('studs', 'program', 'year', 'head', 'sem'));
-
         }
 
 // All choces
@@ -1590,7 +1545,7 @@ class AdminController extends Controller
     if ($program == "All" && $year == "All"){
 
 
-        $programs = DB::table("programs")                   
+        $programs = DB::table("programs")
                ->orderBy('abbreviation', 'asc')
                ->get();
 
@@ -1647,7 +1602,7 @@ class AdminController extends Controller
 
         return view('Admin/file')->with(compact('orgs', 'offs', 'sy'));
 
-        
+
     }
 
     public function orgFileView($org_name, $schl_year)
@@ -1662,20 +1617,20 @@ class AdminController extends Controller
                 ->get();
 
         if($school_year = request('school_year') && $org_name = request('org_name') ) {
-    
+
         $orgs = OrgFileTable::where('school_year', "=", request('school_year'))
             ->where('org_name', "=", request('org_name'))
             ->orderby('created_at', 'desc')
             ->get();
 
-          }    
+          }
 
           $archives = DB::table('org_file_tables')
           ->select(DB::raw('school_year as school_year, org_name as org_name, COUNT(*) file_count'))
                    ->groupBy('school_year')
                    ->orderByRaw('min(created_at) asc')
                    ->get();
-               
+
             return view('Admin/orgFileView')->with(compact('orgs', 'archives'));
     }
 
@@ -1689,9 +1644,9 @@ class AdminController extends Controller
                 ->where("school_year", '=', $sy)
                 ->orderby('school_year', 'desc')
                 ->get();
-               
+
         if($school_year = request('school_year') && $office_name = request('office_name') ) {
-    
+
         $offs = StaffFileTable::where('school_year', "=", request('school_year'))
             ->where('office_name', "=", request('office_name'))
             ->orderby('created_at', 'desc')
@@ -1747,7 +1702,7 @@ public function printPreview5(Request $request)
               ->responsive(false)
               ->height(400)
               ->width(900)
-              ->groupBy('program'); 
+              ->groupBy('program');
 
         $chartt = Charts::database(DB::table('stud_pregnant_tracers')
                    ->select(DB::raw('name as name, program as program, semester as semester, COUNT(*) cases'))
@@ -1760,7 +1715,7 @@ public function printPreview5(Request $request)
               ->responsive(false)
               ->height(400)
               ->width(900)
-              ->groupBy('program'); 
+              ->groupBy('program');
 
         $chart2 = Charts::database(StudPregnantTracer::all(), 'bar', 'highcharts')
               ->title("Number of Unintended Pregnancy Per Year")
@@ -1771,11 +1726,11 @@ public function printPreview5(Request $request)
               ->groupByYear('10');
 
 
-        $programs = DB::table("programs")                   
+        $programs = DB::table("programs")
            ->orderBy('abbreviation', 'asc')
-           ->get(); 
+           ->get();
 
-        $head = Admin::all();    
+        $head = Admin::all();
 
         $studs = StudPregnantTracer::orderBy('id', 'desc')->paginate(5);
         return view('/printPreview5')->with(compact('studs', 'chart', 'chartt', 'chart2', 'programs', 'sy', 'head'));
@@ -1786,7 +1741,7 @@ public function printPreview5(Request $request)
     {
 
          $sy = $request->get('p_year');
-        
+
          $chart = Charts::database(DB::table('stud_vio_tracers')
                    ->select(DB::raw('name as name, program as program, violation as violation, COUNT(*) cases'))
                    ->where("semester", '=', "1st")
@@ -1867,7 +1822,7 @@ public function printPreview5(Request $request)
               ->width(900)
               ->groupBy('gender');
 
-       
+
         $studs = DB::table('stud_vio_tracers')
                    ->select(DB::raw('name as name, program as program, violation as violation, COUNT(violation) cases'))
                    ->groupBy('name', 'program')
@@ -1877,7 +1832,7 @@ public function printPreview5(Request $request)
         $counts = DB::table('stud_vio_tracers')
             ->select(DB::raw('name as name, program as program, violation as violation'))
             ->groupBy('name')
-            ->get();               
+            ->get();
 
         $course = Program::all();
         $casess = 0;
@@ -1887,7 +1842,7 @@ public function printPreview5(Request $request)
                    ->orderBy('violation', 'asc')
                    ->get();
 
-        $programs = DB::table("programs")                   
+        $programs = DB::table("programs")
                    ->orderBy('abbreviation', 'asc')
                    ->get();
 
@@ -1902,6 +1857,7 @@ public function printPreview5(Request $request)
         $this->validate($request, array(
             'osa_heads' => 'required',
         ));
+        // Again.
 
         $admin = Admin::find(1);
         $admin->name = $request->osa_heads;
@@ -1910,7 +1866,7 @@ public function printPreview5(Request $request)
 
         Session::flash('success', 'save !');
 
-        return redirect('/conPanel');
+        return redirect('/conPanel'); // Again
 
     }
 
@@ -1927,7 +1883,7 @@ public function printPreview5(Request $request)
 
         Session::flash('success', 'save !');
 
-        return redirect('/conPanel');
+        return redirect('/conPanel'); // Again
 
     }
 
@@ -1944,7 +1900,7 @@ public function printPreview5(Request $request)
 
         Session::flash('success', 'The account successfully deleted !');
 
-        return redirect('/conPanel');
+        return redirect('/conPanel'); // Again
     }
 
     public function staffDelete($id)
@@ -1954,8 +1910,6 @@ public function printPreview5(Request $request)
 
         Session::flash('success', 'The account successfully deleted !');
 
-        return redirect('/conPanel');
+        return redirect('/conPanel'); //  Again
     }
-
 }
-
